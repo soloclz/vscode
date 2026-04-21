@@ -1161,6 +1161,22 @@ suite('MarkdownRenderer', () => {
 				const completeTokens = marked.marked.lexer('<sup>');
 				assert.deepStrictEqual(newTokens, completeTokens);
 			});
+
+			test('issue #239765 repro: chat wraps content in <body>…</body>', () => {
+				// ChatContentMarkdownRenderer wraps the streamed value in a
+				// <body> envelope, so the last marked token is the closing
+				// </body> html block rather than the paragraph being
+				// streamed. The fix must still reach that paragraph.
+				const incomplete = '<body>\n\n<sup><span style="color:var(--vscode-editorCodeLens-foreground);\n\n</body>';
+				const tokens = marked.marked.lexer(incomplete);
+				const newTokens = fillInIncompleteTokens(tokens);
+
+				const rawList = newTokens.map(t => `${t.type}:${t.raw}`).join('|');
+				assert.ok(!rawList.includes('<span'),
+					`expected incomplete <span fragment to be trimmed, got: ${rawList}`);
+				assert.strictEqual(newTokens.at(-1)?.type, 'html',
+					`trailing </body> html token should be preserved, got: ${rawList}`);
+			});
 		});
 	});
 });

@@ -1017,21 +1017,33 @@ function fillInIncompleteTokensOnce(tokens: marked.TokensList): marked.TokensLis
 		}
 	}
 
-	const lastToken = tokens.at(-1);
-	if (!newTokens && lastToken?.type === 'list') {
-		const newListToken = completeListItemPattern(lastToken as marked.Tokens.List);
+	// Chat markdown wraps content in <body>...</body> (see
+	// ChatContentMarkdownRenderer) which leaves trailing `html` / `space`
+	// tokens after the actual content. Walk past those to find the
+	// effective last token to patch, and preserve the trailing tokens
+	// when we replace it.
+	let effectiveLastIdx = tokens.length - 1;
+	while (effectiveLastIdx >= 0 &&
+		(tokens[effectiveLastIdx].type === 'html' ||
+			tokens[effectiveLastIdx].type === 'space')) {
+		effectiveLastIdx--;
+	}
+	const effectiveLastToken = effectiveLastIdx >= 0 ? tokens[effectiveLastIdx] : undefined;
+
+	if (!newTokens && effectiveLastToken?.type === 'list') {
+		const newListToken = completeListItemPattern(effectiveLastToken as marked.Tokens.List);
 		if (newListToken) {
-			newTokens = [newListToken];
-			i = tokens.length - 1;
+			newTokens = [newListToken, ...tokens.slice(effectiveLastIdx + 1)];
+			i = effectiveLastIdx;
 		}
 	}
 
-	if (!newTokens && lastToken?.type === 'paragraph') {
+	if (!newTokens && effectiveLastToken?.type === 'paragraph') {
 		// Only operates on a single token, because any newline that follows this should break these patterns
-		const newToken = completeSingleLinePattern(lastToken as marked.Tokens.Paragraph);
+		const newToken = completeSingleLinePattern(effectiveLastToken as marked.Tokens.Paragraph);
 		if (newToken) {
-			newTokens = [newToken];
-			i = tokens.length - 1;
+			newTokens = [newToken, ...tokens.slice(effectiveLastIdx + 1)];
+			i = effectiveLastIdx;
 		}
 	}
 
@@ -1044,8 +1056,8 @@ function fillInIncompleteTokensOnce(tokens: marked.TokensList): marked.TokensLis
 		return newTokensList as marked.TokensList;
 	}
 
-	if (lastToken?.type === 'heading') {
-		const completeTokens = completeHeading(lastToken as marked.Tokens.Heading, mergeRawTokenText(tokens));
+	if (effectiveLastToken?.type === 'heading') {
+		const completeTokens = completeHeading(effectiveLastToken as marked.Tokens.Heading, mergeRawTokenText(tokens));
 		if (completeTokens) {
 			return completeTokens;
 		}
