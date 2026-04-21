@@ -1085,5 +1085,82 @@ suite('MarkdownRenderer', () => {
 				assert.deepStrictEqual(newTokens, tokens);
 			});
 		});
+
+		suite('incomplete html tag', () => {
+			test('strips unterminated opening tag at end', () => {
+				const incomplete = 'hello <sup';
+				const tokens = marked.marked.lexer(incomplete);
+				const newTokens = fillInIncompleteTokens(tokens);
+
+				const completeTokens = marked.marked.lexer('hello ');
+				assert.deepStrictEqual(newTokens, completeTokens);
+			});
+
+			test('strips unterminated tag with attributes at end', () => {
+				const incomplete = 'hello <span style="color:red';
+				const tokens = marked.marked.lexer(incomplete);
+				const newTokens = fillInIncompleteTokens(tokens);
+
+				const completeTokens = marked.marked.lexer('hello ');
+				assert.deepStrictEqual(newTokens, completeTokens);
+			});
+
+			test('strips unterminated closing tag at end', () => {
+				const incomplete = 'hello </su';
+				const tokens = marked.marked.lexer(incomplete);
+				const newTokens = fillInIncompleteTokens(tokens);
+
+				const completeTokens = marked.marked.lexer('hello ');
+				assert.deepStrictEqual(newTokens, completeTokens);
+			});
+
+			test('drops paragraph when content is only an incomplete tag', () => {
+				const incomplete = '<sup';
+				const tokens = marked.marked.lexer(incomplete);
+				const newTokens = fillInIncompleteTokens(tokens);
+
+				const renderer = new marked.marked.Renderer();
+				const parsed = marked.marked.parser(newTokens, { renderer, async: false });
+				assert.strictEqual(parsed.trim(), '');
+			});
+
+			test('leaves complete tags alone', () => {
+				const complete = 'hello <sup>note</sup>';
+				const tokens = marked.marked.lexer(complete);
+				const newTokens = fillInIncompleteTokens(tokens);
+
+				assert.deepStrictEqual(newTokens, tokens);
+			});
+
+			test('leaves partially-open element with body alone', () => {
+				// Opening tag is complete; body is still being streamed. The
+				// opener is already valid HTML so there's nothing to trim.
+				const partial = 'hello <sup>not';
+				const tokens = marked.marked.lexer(partial);
+				const newTokens = fillInIncompleteTokens(tokens);
+
+				assert.deepStrictEqual(newTokens, tokens);
+			});
+
+			test('leaves literal less-than alone', () => {
+				const text = 'count is a < b';
+				const tokens = marked.marked.lexer(text);
+				const newTokens = fillInIncompleteTokens(tokens);
+
+				assert.deepStrictEqual(newTokens, tokens);
+			});
+
+			test('issue #239765 repro: nested unterminated inline html', () => {
+				// As chunks arrive mid-tag, marked tokenizes the `<span …`
+				// fragment as text, which would otherwise render as escaped
+				// raw markup until the rest of the chunk lands.
+				const incomplete = '<sup><span style="color:var(--vscode-editorCodeLens-foreground);';
+				const tokens = marked.marked.lexer(incomplete);
+				const newTokens = fillInIncompleteTokens(tokens);
+
+				const completeTokens = marked.marked.lexer('<sup>');
+				assert.deepStrictEqual(newTokens, completeTokens);
+			});
+		});
 	});
 });

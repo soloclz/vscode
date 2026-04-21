@@ -805,6 +805,21 @@ function completeSingleLinePattern(token: marked.Tokens.Text | marked.Tokens.Par
 		return undefined;
 	}
 
+	// If the paragraph ends with a partially-streamed HTML tag (e.g. `<sup`
+	// or `<span style="`), strip it off and re-lex. Without this, marked
+	// tokenizes the incomplete opener as text, producing escaped raw markup
+	// (e.g. `&lt;span …`) that flashes visibly until the next chunk arrives
+	// with the closing `>`. See issue #239765.
+	const incompleteHtmlTrimmed = trimIncompleteHtmlTag(token.raw);
+	if (incompleteHtmlTrimmed !== undefined) {
+		const relexed = incompleteHtmlTrimmed.length > 0
+			? marked.lexer(incompleteHtmlTrimmed)[0]
+			: undefined;
+		// If the whole paragraph was just the incomplete tag, emit a zero-
+		// length space token so the caller drops the paragraph entirely.
+		return relexed ?? ({ type: 'space', raw: '' } as marked.Tokens.Space);
+	}
+
 	for (let i = token.tokens.length - 1; i >= 0; i--) {
 		const subtoken = token.tokens[i];
 		if (subtoken.type === 'text') {
@@ -866,6 +881,21 @@ function completeSingleLinePattern(token: marked.Tokens.Text | marked.Tokens.Par
 
 function hasLinkTextAndStartOfLinkTarget(str: string): boolean {
 	return !!str.match(/(^|\s)\[.*\]\(\w*/);
+}
+
+/**
+ * If `raw` ends with an unterminated HTML tag (the opening `<` has no
+ * matching `>`), return `raw` with that trailing fragment removed (possibly
+ * an empty string). Otherwise returns undefined. The match requires the
+ * character after `<` or `</` to be a letter, so literal uses of `<` as
+ * less-than (e.g. `a < b`) are left alone.
+ */
+function trimIncompleteHtmlTag(raw: string): string | undefined {
+	const match = raw.match(/<\/?[a-zA-Z][^<>]*$/);
+	if (!match) {
+		return undefined;
+	}
+	return raw.slice(0, match.index);
 }
 
 function hasStartOfLinkTargetAndNoLinkText(str: string): boolean {
